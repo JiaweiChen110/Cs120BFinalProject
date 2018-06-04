@@ -2,7 +2,7 @@
  * FinalProject.c
  *
  * Created: 5/31/2018 8:29:55 PM
- * Author : alph_
+ * Author : Jiawei Chen
  */ 
 
 #include <avr/io.h>
@@ -83,7 +83,7 @@ void clearLED(int indicator){
 
 //shared variables
 int row[8] = {0x87,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x87};
-int row2[8] = {0x0F,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x0F};
+int row2[8] = {0x87,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x87};
 	
 int col[8] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};
 int gameOn = 0;//0
@@ -182,7 +182,7 @@ int sTick(int state){
 				}
 				if(scrollNum == 8){
 					scrollNum = 0;
-					//vScroll = 0;
+					vScroll = 0;
 					displayStart = 0;
 					gameOn = 1;
 					gameOver = 0;
@@ -479,6 +479,7 @@ int bTick(int state){
 							row[ballMove] = (row[ballMove]&nextMove);
 							row[ballCol] = 0xFF;
 							ballOn = 0;
+							//gameOn = 0;
 							gameOver = 1;
 							out = 1;
 						}
@@ -489,6 +490,7 @@ int bTick(int state){
 							row[ballMove] = (row[ballMove]&nextMove);
 							row[ballCol] = 0xFF;
 							ballOn = 0;
+							//gameOn = 0;
 							gameOver = 1;
 							out = 1;
 						}
@@ -506,7 +508,45 @@ int bTick(int state){
 						flip = 1;
 					}
 				}
-				state = vMove;
+				if(ballOn == 0){
+					state = wait3;
+				}else{
+					state = vMove;
+				}
+				break;
+			default:
+				break;
+		}
+	}
+	return state;
+};
+
+unsigned char D5 = 0x00;
+enum resetState{resetGame} rState;
+int rTick(int state){
+	D5 = ~PIND&0x20;
+
+	if(gameOver){
+		switch(state){
+			case resetGame:
+				if(D5){
+					displayStart = 1;
+					gameOn = 0;
+					gameOver = 0;
+					p1First = 0;
+					p2First = 0;
+					ballCol = 0;
+					ballMove = 0;
+					nextMove = 0;
+					horizontal = 0;
+					vertical = 0;
+					out = 0;
+					flip=0;
+					for(int i=0;i<8;i++){
+						row[i] = row2[i];//just being lazy xd
+					}
+				}
+					state = resetGame;
 				break;
 			default:
 				break;
@@ -531,7 +571,8 @@ int main(void)
 	unsigned long int SMTick3_time = 5;
 	unsigned long int SMTick4_time = 2;
 	unsigned long int SMTick5_time = 50;
-	unsigned long int SMTick6_time = 50;
+	unsigned long int SMTick6_time = 50;//ball movement
+	unsigned long int SMTick7_time = 10;//reset button
 	
 	unsigned long int calGCD = 1;
 	calGCD = findGCD(calGCD,SMTick1_time);
@@ -540,6 +581,7 @@ int main(void)
 	calGCD = findGCD(calGCD,SMTick4_time);
 	calGCD = findGCD(calGCD,SMTick5_time);
 	calGCD = findGCD(calGCD,SMTick6_time);
+	calGCD = findGCD(calGCD,SMTick7_time);
 	
 	//Greatest common divisor for all tasks or smallest time unit for tasks.
 	unsigned long int GCD = calGCD;
@@ -551,10 +593,11 @@ int main(void)
 	unsigned long int SMTick4_period = SMTick4_time/GCD;
 	unsigned long int SMTick5_period = SMTick5_time/GCD;
 	unsigned long int SMTick6_period = SMTick6_time/GCD;
+	unsigned long int SMTick7_period = SMTick7_time/GCD;
 	
 	//Declare an array of tasks
-	static task task1, task2, task3 , task4, task5, task6;
-	task *tasks[] = { &task1, &task2, &task3 ,&task4 ,&task5 ,&task6};
+	static task task1, task2, task3 , task4, task5, task6, task7;
+	task *tasks[] = { &task1, &task2, &task3 ,&task4 ,&task5 ,&task6 ,&task7};
 	const unsigned short numTasks = sizeof(tasks)/sizeof(task*);
 	
 	// Task 1
@@ -592,6 +635,12 @@ int main(void)
 	task6.period = SMTick6_period;
 	task6.elapsedTime = SMTick6_time;
 	task6.TickFct = &bTick;
+	
+	//Task 7
+	task7.state = resetGame;
+	task7.period = SMTick7_period;
+	task7.elapsedTime = SMTick7_time;
+	task7.TickFct = &rTick;
 	
 	TimerSet(GCD);
 	TimerOn();
