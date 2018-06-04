@@ -82,9 +82,13 @@ void clearLED(int indicator){
 }
 
 //shared variables
-int row[8] = {0x0F,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x0F};
+int row[8] = {0x87,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x87};
+int row2[8] = {0x0F,0xFF,0xFF,0xFF,0xFF,0xFF,0xFF,0x0F};
+	
 int col[8] = {0x01,0x02,0x04,0x08,0x10,0x20,0x40,0x80};
-int gameOn = 1;//0
+int gameOn = 0;//0
+int ballOn = 0;
+int gameOver = 0;
 int currentCol = 0;//0
 int displayStart = 0;//0
 int start[8][15] = {
@@ -115,6 +119,9 @@ int StartTick(int state){
 			if(D4 && (!displaying)){
 				displayStart = 1;
 				displaying = 1;
+				for(int i=0;i<8;i++){
+					row[i] = row2[i];//just being lazy xd
+				}
 			}
 			state = startDisplay;
 			break;
@@ -178,6 +185,8 @@ int sTick(int state){
 					//vScroll = 0;
 					displayStart = 0;
 					gameOn = 1;
+					gameOver = 0;
+					//ballOn =1;
 				}
 				//scrollNum = 0;
 			}
@@ -223,12 +232,13 @@ enum control1{wait1, up1, down1, waitHold1}c1State;
 int c1Tick(int state){
 	D0 = ~PIND&0x01;
 	D1 = ~PIND&0x02;
-	if(D0||D1){
-		if(!p2First){
-			p1First = 1;
+	if(gameOn&&!gameOver){
+		if(D0||D1){
+			if(!p2First){
+				p1First = 1;
+			}
+			ballOn = 1;
 		}
-	}
-	if(gameOn){
 		switch(state){
 			case wait1:
 				if(D0&!D1){
@@ -259,12 +269,12 @@ int c1Tick(int state){
 			case wait1:
 				break;
 			case up1:
-				if(!(row[0]&0x10)){
+				if(!(row[0]&0x10) && ballOn){
 					row[0]= (row[0]>>1)|0x80;
 				}
 				break;
 			case down1:
-				if(!(row[0]&0x08)){
+				if(!(row[0]&0x08) && ballOn){
 					row[0] = (row[0]<<1)|0x01;
 				}
 				break;
@@ -284,12 +294,13 @@ enum control2{wait2, up2, down2, waitHold2}c2State;
 int c2Tick(int state){
 	D2 = ~PIND&0x04;
 	D3 = ~PIND&0x08;
-	if(D2||D3){
-		if(!p1First){
-			p2First = 1;
+	if(gameOn&&!gameOver){
+		if(D2||D3){
+			if(!p1First){
+				p2First = 1;
+			}
+			ballOn = 1;
 		}
-	}
-	if(gameOn){
 		switch(state){
 			case wait2:
 			if(D2&&!D3){
@@ -320,12 +331,12 @@ int c2Tick(int state){
 			case wait2:
 			break;
 			case up2:
-			if(!(row[7]&0x10)){
+			if(!(row[7]&0x10) && ballOn){
 				row[7]= (row[7]>>1)|0x80;
 			}
 			break;
 			case down2:
-			if(!(row[7]&0x08)){
+			if(!(row[7]&0x08) && ballOn){
 				row[7] = (row[7]<<1)|0x01;
 			}
 			break;
@@ -339,10 +350,16 @@ int c2Tick(int state){
 };
 
 int ballCol = 0;
+int ballMove = 0;
+int nextMove = 0;
+int horizontal = 0;
+int vertical = 0;
+int out = 0;
+int flip=0;
 
-enum ballState{wait3,p1Serve, p2Serve,move,stop,endG} BState;
+enum ballState{wait3,p1Serve, p2Serve,move,vMove,stop,endG} BState;
 int bTick(int state){
-	if(gameOn){
+	if(ballOn){
 		switch(state){
 			case wait3:
 				if(p1First){
@@ -355,15 +372,141 @@ int bTick(int state){
 				break;
 			case p1Serve:
 				ballCol = 3;
+				ballMove = 2;
+				horizontal = 1;
 				row[ballCol] = 0xF7;
 				state = move;
 				break;
 			case p2Serve:
 				ballCol = 4;
+				ballMove = 5;
+				horizontal = 1;
 				row[ballCol] = 0xF7;
 				state = move;
 				break;
 			case move:
+				if(ballMove < ballCol && horizontal){
+					if(ballMove!=0){
+						row[ballCol] = 0xFF;
+						ballCol = ballMove;
+						row[ballCol] = 0xF7;
+						ballMove--;
+					}else{
+						if(!(row[ballMove]&0x08)){//hit bar left
+							if(row[ballMove]&0x10){
+								vertical = 0;
+								state = vMove;
+							}else if(row[ballMove]&0x04){
+								vertical = 1;
+								state = vMove;
+							}
+							/*
+							if(row[ballMove] == 0x87){
+								vertical = 1;
+								state = vMove;
+								ballOn = 0;///////
+							}else if(row[ballMove] == 0xF0){
+								vertical = 0;
+								state = vMove;
+								//ballOn = 0;///////
+							}
+							*/
+							ballMove = 2;
+						}else{
+							row[ballCol] = 0xFF;
+							row[ballMove] = row[ballMove]&0xF7;
+							ballOn = 0;
+						}
+					}
+				}else if(ballMove > ballCol && horizontal){
+					if(ballMove!=7){
+						row[ballCol] = 0xFF;
+						ballCol = ballMove;
+						row[ballCol] = 0xF7;
+						ballMove++;
+					}else{
+						if(!(row[ballMove]&0x08)){//hit bar
+							if(row[ballMove]&0x10){
+								vertical = 0;
+								state = vMove;
+							}else if(row[ballMove]&0x04){
+								vertical = 1;
+								state = vMove;
+							}
+							/*
+							if(row[ballMove] == 0x87){
+								vertical = 1;
+								state = vMove;
+								ballOn = 0;///////
+							}else if(row[ballMove] == 0xF0){
+								vertical = 0;
+								state = vMove;
+								//ballOn = 0;///////
+							}
+							*/
+							ballMove = 5;
+							
+						}else{
+							row[ballCol] = 0xFF;
+							row[ballMove] = row[ballMove]&0xF7;
+							ballOn = 0;
+						}
+					}
+				}
+				break;
+			case vMove:
+				if(vertical){//up
+					//if(~nextMove&0x01){
+						//vertical = !vertical;
+					//}else{
+						nextMove = (row[ballCol]>>1) | 0x80;
+					//}
+				}else{//down
+					//if(~nextMove&0x08){
+						//vertical=!vertical;
+					//}else{
+						nextMove = (row[ballCol]<<1) | 0x01;
+					//}
+				}
+				if( (~row[ballCol]&0x01 || ~row[ballCol]&0x80) && flip){ // flip the direction when hitting top or bottom
+					vertical = !vertical;
+					flip=0;
+				}else{//check if hits bar left or right, set next position backward
+					if(ballMove == 7){
+						if(!(~nextMove&row[ballMove])){//hit right
+							ballMove = 5;
+						}else{// not hit, game over
+							row[ballMove] = (row[ballMove]&nextMove);
+							row[ballCol] = 0xFF;
+							ballOn = 0;
+							gameOver = 1;
+							out = 1;
+						}
+					}else if(ballMove == 0){
+						if(!(~nextMove&row[ballMove])){//hit left
+							ballMove = 2;
+						}else{// not hit, game over
+							row[ballMove] = (row[ballMove]&nextMove);
+							row[ballCol] = 0xFF;
+							ballOn = 0;
+							gameOver = 1;
+							out = 1;
+						}
+					}
+					if(!out){
+						row[ballMove] = nextMove;
+						row[ballCol] = 0xFF;
+						if(ballMove < ballCol){
+							ballCol = ballMove; //update ball position
+							ballMove--;
+						}else{
+							ballCol = ballMove;
+							ballMove++;
+						}
+						flip = 1;
+					}
+				}
+				state = vMove;
 				break;
 			default:
 				break;
@@ -388,7 +531,7 @@ int main(void)
 	unsigned long int SMTick3_time = 5;
 	unsigned long int SMTick4_time = 2;
 	unsigned long int SMTick5_time = 50;
-	unsigned long int SMTick6_time = 2;
+	unsigned long int SMTick6_time = 50;
 	
 	unsigned long int calGCD = 1;
 	calGCD = findGCD(calGCD,SMTick1_time);
