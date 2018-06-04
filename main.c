@@ -241,7 +241,7 @@ int c1Tick(int state){
 		}
 		switch(state){
 			case wait1:
-				if(D0&!D1){
+				if(D0&&!D1){
 					state = up1;
 				}else if(!D0&&D1){
 					state = down1;
